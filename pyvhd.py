@@ -37,7 +37,7 @@ import math
 def divro(num, den):
     # Divide always rounding up and returning an integer
     # Is there some nicer way to do this?
-    return int(math.ceil((1.0 * num) / (1.0 * den)))
+    return int(math.ceil(num / den))
 
 
 def vhd_checksum(string):
@@ -45,7 +45,7 @@ def vhd_checksum(string):
     # sum up all bytes in the checked structure then take the ones compliment
     checksum = 0
     for byte in string:
-        checksum += ord(byte)
+        checksum += byte
     return (checksum ^ 0xFFFFFFFF)
 
 
@@ -58,35 +58,35 @@ def vhd_chs(size):
 
     if sectors >= 65535 * 16 * 63:
         spt = 255
-        cth = sectors / spt
+        cth = sectors // spt
         heads = 16
     else:
         spt = 17
-        cth = sectors / spt
-        heads = (cth + 1023) / 1024
+        cth = sectors // spt
+        heads = (cth + 1023) // 1024
 
         if heads < 4:
             heads = 4
 
         if (cth >= (heads * 1024)) or (heads > 16):
             spt = 31
-            cth = sectors / spt
+            cth = sectors // spt
             heads = 16
 
         if cth >= (heads * 1024):
             spt = 63
-            cth = sectors / spt
+            cth = sectors // spt
             heads = 16
 
-    cylinders = cth / heads
+    cylinders = cth // heads
 
     return (cylinders, heads, spt)
 
 
 def zerostring(len):
-    zs = ""
+    zs = b''
     for i in range(1, len):
-        zs += '\0'
+        zs += b'\0'
     return zs
 
 
@@ -156,13 +156,13 @@ BAT_HDR_FMT = ">8sQIII"
 
 VHD_BLOCKSIZE = 2 * 1024 * 1024  # Default blocksize 2 MB
 SECTORSIZE = 512
-VHD_BLOCKSIZE_SECTORS = VHD_BLOCKSIZE / SECTORSIZE
+VHD_BLOCKSIZE_SECTORS = VHD_BLOCKSIZE // SECTORSIZE
 VHD_HEADER_SIZE = struct.calcsize(HEADER_FMT)
 VHD_DYN_HEADER_SIZE = struct.calcsize(DYNAMIC_FMT)
-SECTOR_BITMAP_SIZE = VHD_BLOCKSIZE / SECTORSIZE / 8
-FULL_SECTOR_BITMAP = ""
+SECTOR_BITMAP_SIZE = VHD_BLOCKSIZE // SECTORSIZE // 8
+FULL_SECTOR_BITMAP = b''
 for i in range(0, SECTOR_BITMAP_SIZE):
-    FULL_SECTOR_BITMAP += chr(0xFF)
+    FULL_SECTOR_BITMAP += b'\xff'
 SECTOR_BITMAP_SECTORS = divro(SECTOR_BITMAP_SIZE, SECTORSIZE)
 # vhd-util has a bug that pads an additional 7 sectors on to each bloc
 # at the end.  I suspect this is due to miscalculating the size of the
@@ -195,7 +195,7 @@ def do_vhd_convert(infile, outfile):
         bat_values.append(current_block_sector)
         current_block_sector += total_block_sectors
 
-    bat = ""
+    bat = b''
     for sector in bat_values:
         bat += struct.pack(">I", (sector))
 
@@ -203,15 +203,15 @@ def do_vhd_convert(infile, outfile):
     # This converter code pre-allocates everything, so we just need a string
     # full of set bits of the correct size
 
-    batmap = ""
-    for i in range(0, bat_entries / 8):
+    batmap = b''
+    for i in range(0, bat_entries // 8):
         batmap += chr(0xFF)
 
     extra_bits = bat_entries % 8
     if extra_bits != 0:
-        batmap += chr((0xFF << (8 - extra_bits)) & 0xFF)
+        batmap += bytes([(0xFF << (8 - extra_bits)) & 0xFF])
 
-    cookie3 = "tdbatmap"
+    cookie3 = b"tdbatmap"
     # 3 sectors for the other headers plus one sector for this
     batmap_offset = (3 + bat_sectors + 1) * SECTORSIZE
     batmap_size = batmap_size_sectors
@@ -225,7 +225,7 @@ def do_vhd_convert(infile, outfile):
 
     batmap_hdr_location = 3 + bat_sectors
 
-    cookie = "conectix"
+    cookie = b"conectix"
     features = 2  # Set by convention - means nothing
     fmt_version = 0x00010000
     data_offset = 512  # location of dynamic header
@@ -233,7 +233,7 @@ def do_vhd_convert(infile, outfile):
     # time and will reject images that have a stamp in the future
     # set it to 24 hours ago to be safe or EPOCH (zero) to be safer
     timestamp = 0
-    creator_app = "tap"
+    creator_app = b"tap"
     creator_ver = 0x10003  # match vhd-util
     creator_os = 0  # match vhd-util
     orig_size = insize
@@ -241,7 +241,7 @@ def do_vhd_convert(infile, outfile):
     (disk_c, disk_h, disk_s) = vhd_chs(curr_size)
     disk_type = 3  # Dynamic
     checksum = 0  # calculated later
-    my_uuid = uuid.uuid4().get_bytes()
+    my_uuid = uuid.uuid4().bytes
     saved_state = 0
     reserved = zerostring(427)
 
@@ -259,7 +259,7 @@ def do_vhd_convert(infile, outfile):
 
     final_header = struct.pack(HEADER_FMT, *tuple(header_vals))
 
-    cookie2 = "cxsparse"
+    cookie2 = b"cxsparse"
     data_offset2 = 0xFFFFFFFFFFFFFFFF
     table_offset = 1536
     header_version = 0x00010000  # match vhd-util
@@ -306,10 +306,10 @@ def do_vhd_convert(infile, outfile):
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
-        print "usage: %s <raw_input_file> <vhd_output_file>" % sys.argv[0]
+        print("usage: %s <raw_input_file> <vhd_output_file>" % sys.argv[0])
         sys.exit(1)
-    infile = open(sys.argv[1], "r")
-    outfile = open(sys.argv[2], "w")
+    infile = open(sys.argv[1], "rb")
+    outfile = open(sys.argv[2], "wb")
     do_vhd_convert(infile, outfile)
     infile.close()
     outfile.close()
